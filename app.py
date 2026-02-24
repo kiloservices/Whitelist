@@ -1,76 +1,46 @@
-import os
 from flask import Flask, request, jsonify
 import json
+import os
 
 app = Flask(__name__)
 
-# --- !!! YOU MUST EDIT THIS SECTION !!! ---
-# This is your simple "database". In a real app, use a real database.
-# Format: "user_key": {"hwid": None or "actual_hwid", "script_id": "1"}
-VALID_KEYS = {
-    "PlushyBear1010": {"hwid": None, "script_id": "1"},  # <-- CHANGE THIS KEY
-    "YourNewKeyHere": {"hwid": None, "script_id": "1"},   # <-- ADD YOUR KEYS
-}
-# --- END OF SECTION TO EDIT ---
-
-# This function simulates fetching your actual Roblox script from a "file"
-def get_script_content(script_id):
-    """In a real project, you might fetch this from a raw GitHub URL or a file."""
-    if script_id == "1":
-        # This is the actual script that will be LOADED AND RUN in Roblox
-        return """
--- YOUR ROBLOX SCRIPT STARTS HERE --
-print("Whitelist successful! Your script is now running.")
---[[
-    Put your entire game script here.
-    For example:
-    game.Players.PlayerAdded:Connect(function(player)
-        player:LoadCharacter()
-    end)
-]]
--- YOUR ROBLOX SCRIPT ENDS HERE --
-        """
-    else:
-        return None
+# Load keys from environment variable (set this in Render dashboard)
+KEYS_JSON = os.environ.get('KEYS', '{}')
+VALID_KEYS = json.loads(KEYS_JSON)
 
 @app.route('/validate', methods=['POST'])
 def validate():
-    # 1. Get the data sent from your Roblox loader
     data = request.get_json()
     user_key = data.get('key')
     user_hwid = data.get('hwid')
-    script_id = data.get('script_id')
-
-    # 2. Check if the key exists in our "database"
-    key_data = VALID_KEYS.get(user_key)
-
-    if not key_data:
+    script_id = data.get('script_id', '1')
+    
+    # Check if key exists
+    if user_key not in VALID_KEYS:
         return jsonify({'status': 'invalid', 'reason': 'Invalid key'})
-
-    # 3. Check HWID (Hardware ID) locking
-    stored_hwid = key_data.get('hwid')
-
-    if stored_hwid is None:
-        # First time this key is used - lock it to this HWID
+    
+    key_data = VALID_KEYS[user_key]
+    
+    # HWID locking
+    if key_data.get('hwid') is None:
+        # First time use - lock it
         VALID_KEYS[user_key]['hwid'] = user_hwid
-        print(f"Key {user_key} locked to HWID: {user_hwid}")
-    elif stored_hwid != user_hwid:
-        # Key is already locked to a DIFFERENT computer
+        # In a real app, save this back to a database
+    elif key_data['hwid'] != user_hwid:
         return jsonify({'status': 'invalid', 'reason': 'HWID mismatch'})
-
-    # 4. If all checks pass, get the script and send it back
-    script_content = get_script_content(script_id)
-
-    if script_content:
+    
+    # Read the actual Lua script
+    try:
+        with open(f'scripts/{script_id}.lua', 'r') as file:
+            script_content = file.read()
         return jsonify({'status': 'valid', 'script': script_content})
-    else:
+    except:
         return jsonify({'status': 'invalid', 'reason': 'Script not found'})
 
 @app.route('/')
 def home():
-    return "Roblox Whitelist Server is Running!"
+    return "Whitelist server is running!"
 
-# This is required for Render to run the server
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
