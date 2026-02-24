@@ -6,7 +6,7 @@ local HttpService = game:GetService("HttpService")
 local hwid = "executor-generated-hwid"
 
 local response = game:HttpPost(
-    "https://yourapp.onrender.com/verify",
+    "https://whitelist-610z.onrender.com",
     HttpService:JSONEncode({
         key = script_key,
         hwid = hwid
