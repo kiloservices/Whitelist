@@ -1,100 +1,99 @@
-local key = script_key
-local HttpService = game:GetService("HttpService")
+from flask import Flask, request, jsonify
+import json
+import os
 
--- Function to get a reliable HWID
-local function getReliableHWID()
-    -- Method 1: Try RbxAnalyticsService (most common)
-    local success, result = pcall(function()
-        return game:GetService("RbxAnalyticsService"):GetClientId()
-    end)
-    
-    if success and result and result ~= "" then
-        return result
-    end
-    
-    -- Method 2: Try UserInputService
-    success, result = pcall(function()
-        return game:GetService("UserInputService"):GetUserId()
-    end)
-    
-    if success and result and result ~= 0 then
-        return "UIS_" .. result
-    end
-    
-    -- Method 3: Use Players service
-    success, result = pcall(function()
-        local player = game.Players.LocalPlayer
-        if player then
-            return "PLAYER_" .. player.UserId .. "_" .. player.Name
-        end
-        return nil
-    end)
-    
-    if success and result then
-        return result
-    end
-    
-    -- Method 4: Combine multiple identifiers
-    local identifiers = {}
-    
-    -- Try to get various IDs
-    pcall(function()
-        table.insert(identifiers, game.GameId)
-    end)
-    
-    pcall(function()
-        table.insert(identifiers, game.PlaceId)
-    end)
-    
-    pcall(function()
-        table.insert(identifiers, game.JobId)
-    end)
-    
-    pcall(function()
-        local player = game.Players.LocalPlayer
-        if player then
-            table.insert(identifiers, player.UserId)
-        end
-    end)
-    
-    -- If we have any identifiers, combine them
-    if #identifiers > 0 then
-        return "COMBINED_" .. HttpService:JSONEncode(identifiers)
-    end
-    
-    -- Final fallback: random but persistent ID using crypto
-    return "FALLBACK_" .. game:GetService("HttpService"):GenerateGUID(false)
-end
+app = Flask(__name__)
 
-local hwid = getReliableHWID()
+# Your valid keys - you can edit these
+VALID_KEYS = {
+    "PlushyBear1010": {"hwid": None, "script_id": "1"},
+    "TestKey123": {"hwid": None, "script_id": "1"},
+    "VIPMember456": {"hwid": None, "script_id": "1"}
+}
 
--- Send to your server
-local success, response = pcall(function()
-    return HttpService:PostAsync(
-        "https://whitelist-p1kc.onrender.com/validate",
-        HttpService:JSONEncode({ 
-            key = key, 
-            hwid = hwid, 
-            script_id = "1" 
-        }),
-        Enum.HttpContentType.ApplicationJson
-    )
+@app.route('/validate', methods=['POST'])
+def validate():
+    try:
+        # Get data from Roblox
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'status': 'error', 'reason': 'No data provided'})
+        
+        user_key = data.get('key')
+        user_hwid = data.get('hwid')
+        script_id = data.get('script_id', '1')
+        
+        print(f"Validation attempt - Key: {user_key}, HWID: {user_hwid}")
+        
+        # Check if key exists
+        if user_key not in VALID_KEYS:
+            return jsonify({'status': 'invalid', 'reason': 'Invalid key'})
+        
+        key_data = VALID_KEYS[user_key]
+        
+        # HWID locking
+        if key_data.get('hwid') is None:
+            # First time use - lock to this HWID
+            VALID_KEYS[user_key]['hwid'] = user_hwid
+            print(f"Key {user_key} locked to HWID: {user_hwid}")
+        elif key_data['hwid'] != user_hwid:
+            return jsonify({'status': 'invalid', 'reason': 'Key already in use on another device'})
+        
+        # Your protected script (this is what runs in Roblox)
+        script_content = """
+-- =====================================================
+-- YOUR PROTECTED ROBLOX SCRIPT STARTS HERE
+-- =====================================================
+
+print("✅ Whitelist verified! Loading script...")
+
+-- Your actual game code below
+game.Players.PlayerAdded:Connect(function(player)
+    print(player.Name .. " joined the game!")
+    
+    -- Example: Give them a tool or do something
+    player:LoadCharacter()
+    
+    -- Chat message
+    game:GetService("Chat"):Chat(player.Character.Head, "Welcome to the game!")
 end)
 
-if not success then
-    return error("Failed to connect to authentication server")
+-- Example function
+local function onPlayerAdded(player)
+    local leaderstats = Instance.new("Folder")
+    leaderstats.Name = "leaderstats"
+    leaderstats.Parent = player
+    
+    local coins = Instance.new("NumberValue")
+    coins.Name = "Coins"
+    coins.Value = 100
+    coins.Parent = leaderstats
 end
 
-local data = HttpService:JSONDecode(response)
+game.Players.PlayerAdded:Connect(onPlayerAdded)
 
-if data.status == "valid" then
-    -- Load the protected script
-    local loadSuccess, loadError = loadstring(data.script)
-    if loadSuccess then
-        loadSuccess()
-    else
-        error("Failed to load script: " .. tostring(loadError))
-    end
-else
-    error("Authentication failed: " .. (data.reason or "Invalid key"))
-end
+print("✅ Script loaded successfully!")
+
+-- =====================================================
+-- YOUR PROTECTED ROBLOX SCRIPT ENDS HERE
+-- =====================================================
+"""
+        
+        return jsonify({'status': 'valid', 'script': script_content})
+        
+    except Exception as e:
+        print(f"Server error: {str(e)}")
+        return jsonify({'status': 'error', 'reason': 'Server error'})
+
+@app.route('/')
+def home():
+    return "Whitelist server is running!"
+
+@app.route('/test')
+def test():
+    return jsonify({'status': 'online', 'message': 'Server is working!'})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
