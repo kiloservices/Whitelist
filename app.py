@@ -1,64 +1,100 @@
-from flask import Flask, request, jsonify
-import json
-import os
+local key = script_key
+local HttpService = game:GetService("HttpService")
 
-app = Flask(__name__)
-
-# Load keys from environment variable or use default for testing
-VALID_KEYS = {
-    "PlushyBear1010": {"hwid": None, "script_id": "1"},
-    "TestKey123": {"hwid": None, "script_id": "1"}
-}
-
-@app.route('/validate', methods=['POST'])
-def validate():
-    try:
-        # Get data from request
-        data = request.get_json()
-        if not data:
-            return jsonify({'status': 'error', 'reason': 'No data provided'})
-        
-        user_key = data.get('key')
-        user_hwid = data.get('hwid')
-        script_id = data.get('script_id', '1')
-        
-        # Check if key exists
-        if user_key not in VALID_KEYS:
-            return jsonify({'status': 'invalid', 'reason': 'Invalid key'})
-        
-        key_data = VALID_KEYS[user_key]
-        
-        # HWID locking
-        if key_data.get('hwid') is None:
-            # First time use - lock it (in memory only)
-            VALID_KEYS[user_key]['hwid'] = user_hwid
-            print(f"Key {user_key} locked to HWID: {user_hwid}")
-        elif key_data['hwid'] != user_hwid:
-            return jsonify({'status': 'invalid', 'reason': 'HWID mismatch'})
-        
-        # Return success with a simple script
-        script_content = """
--- Your protected script
-print("Successfully loaded whitelisted script!")
-game.Players.PlayerAdded:Connect(function(player)
-    print(player.Name .. " joined with whitelist access!")
-end)
-"""
-        
-        return jsonify({'status': 'valid', 'script': script_content})
+-- Function to get a reliable HWID
+local function getReliableHWID()
+    -- Method 1: Try RbxAnalyticsService (most common)
+    local success, result = pcall(function()
+        return game:GetService("RbxAnalyticsService"):GetClientId()
+    end)
     
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({'status': 'error', 'reason': str(e)})
+    if success and result and result ~= "" then
+        return result
+    end
+    
+    -- Method 2: Try UserInputService
+    success, result = pcall(function()
+        return game:GetService("UserInputService"):GetUserId()
+    end)
+    
+    if success and result and result ~= 0 then
+        return "UIS_" .. result
+    end
+    
+    -- Method 3: Use Players service
+    success, result = pcall(function()
+        local player = game.Players.LocalPlayer
+        if player then
+            return "PLAYER_" .. player.UserId .. "_" .. player.Name
+        end
+        return nil
+    end)
+    
+    if success and result then
+        return result
+    end
+    
+    -- Method 4: Combine multiple identifiers
+    local identifiers = {}
+    
+    -- Try to get various IDs
+    pcall(function()
+        table.insert(identifiers, game.GameId)
+    end)
+    
+    pcall(function()
+        table.insert(identifiers, game.PlaceId)
+    end)
+    
+    pcall(function()
+        table.insert(identifiers, game.JobId)
+    end)
+    
+    pcall(function()
+        local player = game.Players.LocalPlayer
+        if player then
+            table.insert(identifiers, player.UserId)
+        end
+    end)
+    
+    -- If we have any identifiers, combine them
+    if #identifiers > 0 then
+        return "COMBINED_" .. HttpService:JSONEncode(identifiers)
+    end
+    
+    -- Final fallback: random but persistent ID using crypto
+    return "FALLBACK_" .. game:GetService("HttpService"):GenerateGUID(false)
+end
 
-@app.route('/')
-def home():
-    return "Whitelist server is running!"
+local hwid = getReliableHWID()
 
-@app.route('/test')
-def test():
-    return jsonify({'status': 'online', 'message': 'Server is working!'})
+-- Send to your server
+local success, response = pcall(function()
+    return HttpService:PostAsync(
+        "https://whitelist-p1kc.onrender.com/validate",
+        HttpService:JSONEncode({ 
+            key = key, 
+            hwid = hwid, 
+            script_id = "1" 
+        }),
+        Enum.HttpContentType.ApplicationJson
+    )
+end)
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+if not success then
+    return error("Failed to connect to authentication server")
+end
+
+local data = HttpService:JSONDecode(response)
+
+if data.status == "valid" then
+    -- Load the protected script
+    local loadSuccess, loadError = loadstring(data.script)
+    if loadSuccess then
+        loadSuccess()
+    else
+        error("Failed to load script: " .. tostring(loadError))
+    end
+else
+    error("Authentication failed: " .. (data.reason or "Invalid key"))
+end
