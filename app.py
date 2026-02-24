@@ -39,7 +39,7 @@ def validate():
 
 @app.route('/')
 def home():
-    return "Whitelist server is running!"
+    return "Whitelist server is runningg!"
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
