@@ -4,23 +4,18 @@ import fs from "fs";
 const app = express();
 app.use(express.json());
 
-// ----------------- LICENSES -----------------
 let licenses = {
     "PlushyBear1010": { hwid: null, script_id: "1" }
 };
 
-// ----------------- VALIDATE ENDPOINT -----------------
 app.post("/validate", (req, res) => {
     const { key, hwid, script_id } = req.body;
     const user = licenses[key];
-
     if (!user) return res.json({ status: "invalid" });
     if (user.script_id !== script_id) return res.json({ status: "no_access" });
     if (user.hwid && user.hwid !== hwid) return res.json({ status: "hwid_mismatch" });
-
     if (!user.hwid) user.hwid = hwid;
 
-    // Read the real Roblox script
     let script = "";
     try {
         script = fs.readFileSync(`./scripts/${script_id}.lua`, "utf8");
@@ -28,14 +23,11 @@ app.post("/validate", (req, res) => {
         return res.json({ status: "script_not_found" });
     }
 
-    res.json({ status: "valid", script: script });
+    res.json({ status: "valid", script });
 });
 
-// ----------------- LOADER ENDPOINT -----------------
 app.get("/loader/:id", (req, res) => {
     const script_id = req.params.id;
-
-    // This Lua loader uses HttpService:PostAsync (correct Roblox API)
     res.type("text/plain").send(`
 local key = script_key
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
@@ -57,6 +49,5 @@ end
     `);
 });
 
-// ----------------- START SERVER -----------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(\`Server running on port \${PORT}\`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
