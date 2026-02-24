@@ -35,12 +35,13 @@ app.post("/validate", (req, res) => {
 app.get("/loader/:id", (req, res) => {
     const script_id = req.params.id;
 
+    // This Lua loader uses HttpService:PostAsync (correct Roblox API)
     res.type("text/plain").send(`
 local key = script_key
 local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
 local HttpService = game:GetService("HttpService")
 
-local response = game:HttpPost(
+local response = HttpService:PostAsync(
     "https://whitelist-p1kc.onrender.com/validate",
     HttpService:JSONEncode({ key = key, hwid = hwid, script_id = "${script_id}" }),
     Enum.HttpContentType.ApplicationJson
@@ -58,4 +59,4 @@ end
 
 // ----------------- START SERVER -----------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(\`Server running on port \${PORT}\`));
