@@ -4,12 +4,12 @@ import fs from "fs";
 const app = express();
 app.use(express.json());
 
-// 🔑 Simple in-memory license system
+// ----------------- LICENSES -----------------
 let licenses = {
     "PlushyBear1010": { hwid: null, script_id: "1" }
 };
 
-// /validate endpoint (called by loader)
+// ----------------- VALIDATE ENDPOINT -----------------
 app.post("/validate", (req, res) => {
     const { key, hwid, script_id } = req.body;
     const user = licenses[key];
@@ -21,15 +21,17 @@ app.post("/validate", (req, res) => {
     if (!user.hwid) user.hwid = hwid;
 
     // Read the real Roblox script
-    const script = fs.readFileSync(`./scripts/${script_id}.lua`, "utf8");
+    let script = "";
+    try {
+        script = fs.readFileSync(`./scripts/${script_id}.lua`, "utf8");
+    } catch (err) {
+        return res.json({ status: "script_not_found" });
+    }
 
-    res.json({
-        status: "valid",
-        script: script
-    });
+    res.json({ status: "valid", script: script });
 });
 
-// /loader/:id endpoint (what Roblox loads)
+// ----------------- LOADER ENDPOINT -----------------
 app.get("/loader/:id", (req, res) => {
     const script_id = req.params.id;
 
@@ -54,6 +56,6 @@ end
     `);
 });
 
-// Start server
+// ----------------- START SERVER -----------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(\`Server running on port \${PORT}\`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
