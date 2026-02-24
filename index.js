@@ -36,7 +36,7 @@ local hwid = game:GetService("RbxAnalyticsService"):GetClientId()
 local HttpService = game:GetService("HttpService")
 
 local response = game:HttpPost(
-    "https://yourapp.onrender.com/validate",
+    "https://whitelist-p1kc.onrender.com",
     HttpService:JSONEncode({ key = key, hwid = hwid, script_id = "${script_id}" }),
     Enum.HttpContentType.ApplicationJson
 )
